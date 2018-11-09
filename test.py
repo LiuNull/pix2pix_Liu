@@ -38,8 +38,10 @@ else:
     from run_engine import run_trt_engine, run_onnx
     
 for i, data in enumerate(dataset):
+    '''
     if i >= opt.how_many:
         break
+    '''
     if opt.data_type == 16:
         data['label'] = data['label'].half()
         data['inst']  = data['inst'].half()

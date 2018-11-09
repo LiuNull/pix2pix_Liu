@@ -45,11 +45,11 @@ from sklearn.cluster import KMeans
 centers = {}
 for label in range(opt.label_nc):
 	feat = features[label]
-	feat = feat[feat[:,-1] > 0.5, :-1]		
+	feat = feat[feat[:,-1] > 0.5, :-1]
 	if feat.shape[0]:
 		n_clusters = min(feat.shape[0], opt.n_clusters)
 		kmeans = KMeans(n_clusters=n_clusters, random_state=0).fit(feat)
-		centers[label] = kmeans.cluster_centers_
+		centers[label] = kmeans.cluster_centers_ # for each label, get k cluster centers
 save_name = os.path.join(save_path, name + '_clustered_%03d.npy' % opt.n_clusters)
 np.save(save_name, centers)
 print('saving to %s' % save_name)

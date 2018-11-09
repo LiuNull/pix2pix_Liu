@@ -17,7 +17,7 @@ def weights_init(m):
         m.weight.data.normal_(1.0, 0.02)
         m.bias.data.fill_(0)
 
-def get_norm_layer(norm_type='instance'):
+def get_norm_layer(norm_type='instance'): # define the way to norm layers
     if norm_type == 'batch':
         norm_layer = functools.partial(nn.BatchNorm2d, affine=True)
     elif norm_type == 'instance':
@@ -45,7 +45,8 @@ def define_G(input_nc, output_nc, ngf, netG, n_downsample_global=3, n_blocks_glo
     netG.apply(weights_init)
     return netG
 
-def define_D(input_nc, ndf, n_layers_D, norm='instance', use_sigmoid=False, num_D=1, getIntermFeat=False, gpu_ids=[]):        
+def define_D(input_nc, ndf, n_layers_D, norm='instance', use_sigmoid=False, num_D=1, getIntermFeat=False, gpu_ids=[]):
+    # getIntermFeat : use discriminator feature matching loss
     norm_layer = get_norm_layer(norm_type=norm)   
     netD = MultiscaleDiscriminator(input_nc, ndf, n_layers_D, norm_layer, use_sigmoid, num_D, getIntermFeat)   
     print(netD)
@@ -77,9 +78,9 @@ class GANLoss(nn.Module):
         self.fake_label_var = None
         self.Tensor = tensor
         if use_lsgan:
-            self.loss = nn.MSELoss()
+            self.loss = nn.MSELoss() # Mean Error Square
         else:
-            self.loss = nn.BCELoss()
+            self.loss = nn.BCELoss() # Cross Entropy loss
 
     def get_target_tensor(self, input, target_is_real):
         target_tensor = None
@@ -88,7 +89,7 @@ class GANLoss(nn.Module):
                             (self.real_label_var.numel() != input.numel()))
             if create_label:
                 real_tensor = self.Tensor(input.size()).fill_(self.real_label)
-                self.real_label_var = Variable(real_tensor, requires_grad=False)
+                self.real_label_var = Variable(real_tensor, requires_grad=False) # pack the Tensor of real_label
             target_tensor = self.real_label_var
         else:
             create_label = ((self.fake_label_var is None) or
@@ -175,7 +176,7 @@ class LocalEnhancer(nn.Module):
         ### output at coarest level
         output_prev = self.model(input_downsampled[-1])        
         ### build up one layer at a time
-        for n_local_enhancers in range(1, self.n_local_enhancers+1):
+        for n_local_enhancers in range(1, self.n_local_enhancers+1): # n_local_enhancers : has n local enhancers (G2)
             model_downsample = getattr(self, 'model'+str(n_local_enhancers)+'_1')
             model_upsample = getattr(self, 'model'+str(n_local_enhancers)+'_2')            
             input_i = input_downsampled[self.n_local_enhancers-n_local_enhancers]            
@@ -212,7 +213,7 @@ class GlobalGenerator(nn.Module):
     def forward(self, input):
         return self.model(input)             
         
-# Define a resnet block
+# Define a resnet block, contains two conv layers
 class ResnetBlock(nn.Module):
     def __init__(self, dim, padding_type, norm_layer, activation=nn.ReLU(True), use_dropout=False):
         super(ResnetBlock, self).__init__()
@@ -222,7 +223,7 @@ class ResnetBlock(nn.Module):
         conv_block = []
         p = 0
         if padding_type == 'reflect':
-            conv_block += [nn.ReflectionPad2d(1)]
+            conv_block += [nn.ReflectionPad2d(1)] # 镜像填充
         elif padding_type == 'replicate':
             conv_block += [nn.ReplicationPad2d(1)]
         elif padding_type == 'zero':
@@ -230,7 +231,7 @@ class ResnetBlock(nn.Module):
         else:
             raise NotImplementedError('padding [%s] is not implemented' % padding_type)
 
-        conv_block += [nn.Conv2d(dim, dim, kernel_size=3, padding=p),
+        conv_block += [nn.Conv2d(dim, dim, kernel_size=3, padding=p), # same size while conv
                        norm_layer(dim),
                        activation]
         if use_dropout:
@@ -276,12 +277,12 @@ class Encoder(nn.Module):
         model += [nn.ReflectionPad2d(3), nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0), nn.Tanh()]
         self.model = nn.Sequential(*model) 
 
-    def forward(self, input, inst):
+    def forward(self, input, inst): # not understand, output the mean features of instance
         outputs = self.model(input)
 
         # instance-wise average pooling
         outputs_mean = outputs.clone()
-        inst_list = np.unique(inst.cpu().numpy().astype(int))        
+        inst_list = np.unique(inst.cpu().numpy().astype(int)) # remove repeated data
         for i in inst_list:
             for b in range(input.size()[0]):
                 indices = (inst[b:b+1] == int(i)).nonzero() # n x 4            
@@ -301,13 +302,13 @@ class MultiscaleDiscriminator(nn.Module):
      
         for i in range(num_D):
             netD = NLayerDiscriminator(input_nc, ndf, n_layers, norm_layer, use_sigmoid, getIntermFeat)
-            if getIntermFeat:                                
+            if getIntermFeat: # use discriminator feature matching loss, is True, save each layer for calculating loss
                 for j in range(n_layers+2):
                     setattr(self, 'scale'+str(i)+'_layer'+str(j), getattr(netD, 'model'+str(j)))                                   
             else:
                 setattr(self, 'layer'+str(i), netD.model)
 
-        self.downsample = nn.AvgPool2d(3, stride=2, padding=[1, 1], count_include_pad=False)
+        self.downsample = nn.AvgPool2d(3, stride=2, padding=[1, 1], count_include_pad=False) # use avgpool to get different scale of input
 
     def singleD_forward(self, model, input):
         if self.getIntermFeat:
@@ -333,6 +334,7 @@ class MultiscaleDiscriminator(nn.Module):
         return result
         
 # Defines the PatchGAN discriminator with the specified arguments.
+# Different scale, same architecture
 class NLayerDiscriminator(nn.Module):
     def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d, use_sigmoid=False, getIntermFeat=False):
         super(NLayerDiscriminator, self).__init__()
@@ -382,7 +384,7 @@ class NLayerDiscriminator(nn.Module):
                 res.append(model(res[-1]))
             return res[1:]
         else:
-            return self.model(input)        
+            return self.model(input)
 
 from torchvision import models
 class Vgg19(torch.nn.Module):

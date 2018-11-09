@@ -29,7 +29,7 @@ class Pix2PixHDModel(BaseModel):
 
         ##### define networks        
         # Generator network
-        netG_input_nc = input_nc        
+        netG_input_nc = input_nc
         if not opt.no_instance:
             netG_input_nc += 1
         if self.use_features:
@@ -48,7 +48,7 @@ class Pix2PixHDModel(BaseModel):
                                           opt.num_D, not opt.no_ganFeat_loss, gpu_ids=self.gpu_ids)
 
         ### Encoder network
-        if self.gen_features:          
+        if self.gen_features:
             self.netE = networks.define_G(opt.output_nc, opt.feat_num, opt.nef, 'encoder', 
                                           opt.n_downsample_E, norm=opt.norm, gpu_ids=self.gpu_ids)  
         if self.opt.verbose:
@@ -65,15 +65,16 @@ class Pix2PixHDModel(BaseModel):
 
         # set loss functions and optimizers
         if self.isTrain:
+            # pool_size : the size of image buffer that stores previously generated images
             if opt.pool_size > 0 and (len(self.gpu_ids)) > 1:
                 raise NotImplementedError("Fake Pool Not Implemented for MultiGPU")
-            self.fake_pool = ImagePool(opt.pool_size)
+            self.fake_pool = ImagePool(opt.pool_size) # store pool_size images first
             self.old_lr = opt.lr
 
             # define loss functions
             self.loss_filter = self.init_loss_filter(not opt.no_ganFeat_loss, not opt.no_vgg_loss)
             
-            self.criterionGAN = networks.GANLoss(use_lsgan=not opt.no_lsgan, tensor=self.Tensor)   
+            self.criterionGAN = networks.GANLoss(use_lsgan=not opt.no_lsgan, tensor=self.Tensor)
             self.criterionFeat = torch.nn.L1Loss()
             if not opt.no_vgg_loss:             
                 self.criterionVGG = networks.VGGLoss(self.gpu_ids)
@@ -84,6 +85,7 @@ class Pix2PixHDModel(BaseModel):
 
             # initialize optimizers
             # optimizer G
+            # niter_fix_global : number of epochs that we only train the outmost local enhancer
             if opt.niter_fix_global > 0:                
                 import sys
                 if sys.version_info >= (3,0):
@@ -211,6 +213,7 @@ class Pix2PixHDModel(BaseModel):
             fake_image = self.netG.forward(input_concat)
         return fake_image
 
+    # dont understand
     def sample_features(self, inst): 
         # read precomputed feature clusters 
         cluster_path = os.path.join(self.opt.checkpoints_dir, self.opt.name, self.opt.cluster_path)        
@@ -223,7 +226,7 @@ class Pix2PixHDModel(BaseModel):
             label = i if i < 1000 else i//1000
             if label in features_clustered:
                 feat = features_clustered[label]
-                cluster_idx = np.random.randint(0, feat.shape[0]) 
+                cluster_idx = np.random.randint(0, feat.shape[0])
                                             
                 idx = (inst == int(i)).nonzero()
                 for k in range(self.opt.feat_num):                                    
@@ -232,6 +235,7 @@ class Pix2PixHDModel(BaseModel):
             feat_map = feat_map.half()
         return feat_map
 
+    # dont understand
     def encode_features(self, image, inst):
         image = Variable(image.cuda(), volatile=True)
         feat_num = self.opt.feat_num
