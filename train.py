@@ -55,35 +55,43 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
 
         # whether to collect output images
         save_fake = total_steps % opt.display_freq == display_delta
+        labelTrain = Variable(data['labelTrain'])
+        # print(labelTrain[0,0].shape) torch.Size([512, 1024])
+        # np.savetxt("labelTrain.txt",labelTrain[0,0].numpy())
 
         ############## Forward Pass ######################
-        losses, generated = model(Variable(data['label']), Variable(data['inst']), Variable(data['image']), Variable(data['feat']), infer=save_fake)
+        losses, generated = model(Variable(data['label']), Variable(data['inst']), Variable(data['image']), Variable(data['feat']),Variable(data['labelTrain']), infer=save_fake)
+
+        # print(ERF_fake_loss) tensor(3.2985, device='cuda:1')
 
         # sum per device losses
-        losses = [ torch.mean(x) if not isinstance(x, int) else x for x in losses ]
+        # if multi-gpu, need the following code
+        # losses = [ torch.mean(x) if not isinstance(x, int)  else x for x in losses ]
         loss_dict = dict(zip(model.module.loss_names, losses))
 
         # calculate final loss scalar
-        loss_D = (loss_dict['D_fake'] + loss_dict['D_real']) * 0.5
-        loss_G = loss_dict['G_GAN'] + loss_dict.get('G_GAN_Feat',0) + loss_dict.get('G_VGG',0)
+        loss_D = (loss_dict['D_fake'] + loss_dict['D_real']) * 0.5 + loss_dict['ERF_fake']
+        # loss_D = (loss_dict['D_fake'] + loss_dict['D_real']) * 0.5 + loss_dict['ERF_fake']
+        # loss_G = loss_dict['G_GAN'] + loss_dict.get('G_GAN_Feat',0) + loss_dict.get('G_VGG',0) + loss_dict['ERF_fake']
+        loss_G = loss_dict['G_GAN'] + loss_dict.get('G_GAN_Feat',0) + loss_dict.get('G_VGG',0) + loss_dict['ERF_fake']
+
 
         ############### Backward Pass ####################
         # update generator weights
         model.module.optimizer_G.zero_grad()
         loss_G.backward()
         model.module.optimizer_G.step()
-
         # update discriminator weights
         model.module.optimizer_D.zero_grad()
         loss_D.backward()
         model.module.optimizer_D.step()
-
         #call(["nvidia-smi", "--format=csv", "--query-gpu=memory.used,memory.free"]) 
 
         ############## Display results and errors ##########
         ### print out errors
         if total_steps % opt.print_freq == print_delta:
             errors = {k: v.data[0] if not isinstance(v, int) else v for k, v in loss_dict.items()}
+            # errors.update('5'=ERF_fake_loss)
             t = (time.time() - iter_start_time) / opt.batchSize
             visualizer.print_current_errors(epoch, epoch_iter, errors, t)
             visualizer.plot_current_errors(errors, total_steps)

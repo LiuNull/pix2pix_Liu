@@ -4,11 +4,42 @@ import os.path
 from data.base_dataset import BaseDataset, get_params, get_transform, normalize
 from data.image_folder import make_dataset
 from PIL import Image
+import numpy as np
+import torch
+from torchvision.transforms import Compose, CenterCrop, Normalize, Resize, Pad
+
+class Relabel:
+    def __init__(self, olabel, nlabel):
+        self.olabel = olabel
+        self.nlabel = nlabel
+
+    def __call__(self, tensor):
+        assert (isinstance(tensor, torch.LongTensor) or isinstance(tensor, torch.ByteTensor)) , 'tensor needs to be LongTensor'
+        tensor[tensor == self.olabel] = self.nlabel
+        return tensor
+
+class ToLabel:
+    def __call__(self, image):
+        return torch.from_numpy(np.array(image)).long().unsqueeze(0)
+        # return torch.from_numpy(np.array(image)).long()
+
+def MyCoTransform(target):
+
+    target = Resize(512, Image.NEAREST)(target)
+    target = ToLabel()(target)
+    target = Relabel(255, 19)(target)
+    return target
 
 class AlignedDataset(BaseDataset):
     def initialize(self, opt):
         self.opt = opt
         self.root = opt.dataroot    
+
+        ### labelTrain semantic maps
+        dir_labelTrain = '_labelTrain'
+        self.dir_labelTrain = os.path.join(opt.dataroot, opt.phase + dir_labelTrain)
+        self.labelTrain_paths  = sorted(make_dataset(self.dir_labelTrain))
+
 
         ### input A (label maps)
         dir_A = '_A' if self.opt.label_nc == 0 else '_label'
@@ -35,6 +66,7 @@ class AlignedDataset(BaseDataset):
         self.dataset_size = len(self.A_paths) 
       
     def __getitem__(self, index):
+
         ### input A (label maps)
         A_path = self.A_paths[index]              
         A = Image.open(A_path)
@@ -54,7 +86,15 @@ class AlignedDataset(BaseDataset):
             transform_B = get_transform(self.opt, params)      
             B_tensor = transform_B(B)
 
-        ### if using instance maps        
+        ### labelTrain semantic maps
+        labelTrain_path = self.labelTrain_paths[index]
+        labelTrain = Image.open(labelTrain_path).convert('P')
+        labelTrain = MyCoTransform(labelTrain)
+        # print(labelTrain.shape)
+        # print(np.array(labelTrain_tensor).shape) # (1, 512, 1024)
+        # np.savetxt("image_transformed.txt",np.array(labelTrain[0]))
+
+        ### if using instance maps 
         if not self.opt.no_instance:
             inst_path = self.inst_paths[index]
             inst = Image.open(inst_path)
@@ -67,7 +107,7 @@ class AlignedDataset(BaseDataset):
                 feat_tensor = norm(transform_A(feat))                            
 
         input_dict = {'label': A_tensor, 'inst': inst_tensor, 'image': B_tensor, 
-                      'feat': feat_tensor, 'path': A_path}
+                      'feat': feat_tensor, 'path': A_path, 'labelTrain' : labelTrain}
 
         return input_dict
 

@@ -7,15 +7,16 @@ from torch.autograd import Variable
 from util.image_pool import ImagePool
 from .base_model import BaseModel
 from . import networks
+from erfnet.erfnet import ERFNet
 
 class Pix2PixHDModel(BaseModel):
     def name(self):
         return 'Pix2PixHDModel'
     
     def init_loss_filter(self, use_gan_feat_loss, use_vgg_loss):
-        flags = (True, use_gan_feat_loss, use_vgg_loss, True, True)
-        def loss_filter(g_gan, g_gan_feat, g_vgg, d_real, d_fake):
-            return [l for (l,f) in zip((g_gan,g_gan_feat,g_vgg,d_real,d_fake),flags) if f]
+        flags = (True, use_gan_feat_loss, use_vgg_loss, True, True, True)
+        def loss_filter(g_gan, g_gan_feat, g_vgg, d_real, d_fake, erf_fake):
+            return [l for (l,f) in zip((g_gan,g_gan_feat,g_vgg,d_real,d_fake,erf_fake),flags) if f]
         return loss_filter
     
     def initialize(self, opt):
@@ -54,14 +55,48 @@ class Pix2PixHDModel(BaseModel):
         if self.opt.verbose:
                 print('---------- Networks initialized -------------')
 
+        # erfnet
+        if self.isTrain:
+            NUM_CLASSES = 20
+            self.erfnet = ERFNet(NUM_CLASSES)
+            '''
+            for param in self.erfnet.parameters():  # froze the layers
+                param.requires_grad = False
+            
+            # if (not args.cpu):
+            if (True):
+                self.erfnet = torch.nn.DataParallel(self.erfnet).cuda()
+            '''
+            self.erfnet.train()
+
         # load networks
         if not self.isTrain or opt.continue_train or opt.load_pretrain:
             pretrained_path = '' if not self.isTrain else opt.load_pretrain
-            self.load_network(self.netG, 'G', opt.which_epoch, pretrained_path)            
+            self.load_network(self.netG, 'G', opt.which_epoch, pretrained_path)
+            self.load_network(self.erfnet, 'ERFNet', opt.which_epoch, pretrained_path)            
             if self.isTrain:
                 self.load_network(self.netD, 'D', opt.which_epoch, pretrained_path)  
             if self.gen_features:
                 self.load_network(self.netE, 'E', opt.which_epoch, pretrained_path)              
+
+        # load pre-trained erfnet
+        if self.isTrain and not opt.continue_train:
+            weightspath = "/home/hsx/project/pix2pixHD_NoFeat/pix2pixHD/pre_trained/erfnet_pretrained.pth"
+            def load_my_state_dict(model, state_dict):  # custom function to load model when not all dict elements
+                own_state = model.state_dict()
+                for name, param in state_dict.items():
+                    if name not in own_state:
+                        if name.startswith("module."):
+                            own_state[name.split("module.")[-1]].copy_(param)
+                        else:
+                            print(name, " not loaded")
+                            continue
+                    else:
+                        own_state[name].copy_(param)
+                return model
+
+            self.erfnet = load_my_state_dict(self.erfnet, torch.load(weightspath, map_location=lambda storage, loc: storage))
+            print("Model and weights LOADED successfully")
 
         # set loss functions and optimizers
         if self.isTrain:
@@ -72,6 +107,53 @@ class Pix2PixHDModel(BaseModel):
             self.old_lr = opt.lr
 
             # define loss functions
+            NUM_CLASSES = 20
+            self.weight = torch.ones(NUM_CLASSES)
+            enc = False
+            if (enc):
+                self.weight[0] = 2.3653597831726
+                self.weight[1] = 4.4237880706787
+                self.weight[2] = 2.9691488742828
+                self.weight[3] = 5.3442072868347
+                self.weight[4] = 5.2983593940735
+                self.weight[5] = 5.2275490760803
+                self.weight[6] = 5.4394111633301
+                self.weight[7] = 5.3659925460815
+                self.weight[8] = 3.4170460700989
+                self.weight[9] = 5.2414722442627
+                self.weight[10] = 4.7376127243042
+                self.weight[11] = 5.2286224365234
+                self.weight[12] = 5.455126285553
+                self.weight[13] = 4.3019247055054
+                self.weight[14] = 5.4264230728149
+                self.weight[15] = 5.4331531524658
+                self.weight[16] = 5.433765411377
+                self.weight[17] = 5.4631009101868
+                self.weight[18] = 5.3947434425354
+            else:
+                self.weight[0] = 2.8149201869965
+                self.weight[1] = 6.9850029945374
+                self.weight[2] = 3.7890393733978
+                self.weight[3] = 9.9428062438965
+                self.weight[4] = 9.7702074050903
+                self.weight[5] = 9.5110931396484
+                self.weight[6] = 10.311357498169
+                self.weight[7] = 10.026463508606
+                self.weight[8] = 4.6323022842407
+                self.weight[9] = 9.5608062744141
+                self.weight[10] = 7.8698215484619
+                self.weight[11] = 9.5168733596802
+                self.weight[12] = 10.373730659485
+                self.weight[13] = 6.6616044044495
+                self.weight[14] = 10.260489463806
+                self.weight[15] = 10.287888526917
+                self.weight[16] = 10.289801597595
+                self.weight[17] = 10.405355453491
+                self.weight[18] = 10.138095855713
+            self.weight[19] = 0
+
+            self.criterionERF = CrossEntropyLoss2d(self.weight.cuda())
+
             self.loss_filter = self.init_loss_filter(not opt.no_ganFeat_loss, not opt.no_vgg_loss)
             
             self.criterionGAN = networks.GANLoss(use_lsgan=not opt.no_lsgan, tensor=self.Tensor)
@@ -81,7 +163,7 @@ class Pix2PixHDModel(BaseModel):
                 
         
             # Names so we can breakout loss
-            self.loss_names = self.loss_filter('G_GAN','G_GAN_Feat','G_VGG','D_real', 'D_fake')
+            self.loss_names = self.loss_filter('G_GAN','G_GAN_Feat','G_VGG','D_real', 'D_fake', 'ERF_fake')
 
             # initialize optimizers
             # optimizer G
@@ -151,10 +233,10 @@ class Pix2PixHDModel(BaseModel):
         else:
             return self.netD.forward(input_concat)
 
-    def forward(self, label, inst, image, feat, infer=False):
+    def forward(self, label, inst, image, feat, labelTrain, infer=False):
         # Encode Inputs
-        input_label, inst_map, real_image, feat_map = self.encode_input(label, inst, image, feat)  
-
+        input_label, inst_map, real_image, feat_map = self.encode_input(label, inst, image, feat)
+        input_labelTrain = Variable(labelTrain.data.cuda())
         # Fake Generation
         if self.use_features:
             if not self.opt.load_features:
@@ -163,19 +245,21 @@ class Pix2PixHDModel(BaseModel):
         else:
             input_concat = input_label
         fake_image = self.netG.forward(input_concat)
+        # print("get fake image")
+        # print(fake_image.shape) # torch.Size([1, 3, 512, 1024])
 
         # Fake Detection and Loss
         pred_fake_pool = self.discriminate(input_label, fake_image, use_pool=True)
-        loss_D_fake = self.criterionGAN(pred_fake_pool, False)        
+        loss_D_fake = self.criterionGAN(pred_fake_pool, False)
 
         # Real Detection and Loss        
         pred_real = self.discriminate(input_label, real_image)
         loss_D_real = self.criterionGAN(pred_real, True)
 
         # GAN loss (Fake Passability Loss)        
-        pred_fake = self.netD.forward(torch.cat((input_label, fake_image), dim=1))        
-        loss_G_GAN = self.criterionGAN(pred_fake, True)               
-        
+        pred_fake = self.netD.forward(torch.cat((input_label, fake_image), dim=1))
+        loss_G_GAN = self.criterionGAN(pred_fake, True)
+
         # GAN feature matching loss
         loss_G_GAN_Feat = 0
         if not self.opt.no_ganFeat_loss:
@@ -190,9 +274,21 @@ class Pix2PixHDModel(BaseModel):
         loss_G_VGG = 0
         if not self.opt.no_vgg_loss:
             loss_G_VGG = self.criterionVGG(fake_image, real_image) * self.opt.lambda_feat
-        
+
+        # Use the ERFNet to get the fake image's semantic map
+        # with torch.no_grad():
+
+        outputs = self.erfnet(fake_image)
+
+        # print(outputs) # torch.Size([1, 20, 512, 1024])
+        # print(outputs.type()) # torch.ByteTensor
+
+        input_labelTrain = input_labelTrain[0]  # print(input_labelTrain.shape) # torch.Size([1, 512, 1024])
+
+        loss_ERF = self.criterionERF(outputs.data.cuda(), input_labelTrain.long())
         # Only return the fake_B image if necessary to save BW
-        return [ self.loss_filter( loss_G_GAN, loss_G_GAN_Feat, loss_G_VGG, loss_D_real, loss_D_fake ), None if not infer else fake_image ]
+
+        return [ self.loss_filter( loss_G_GAN, loss_G_GAN_Feat, loss_G_VGG, loss_D_real, loss_D_fake , loss_ERF), None if not infer else fake_image]
 
     def inference(self, label, inst):
         # Encode Inputs        
@@ -272,6 +368,7 @@ class Pix2PixHDModel(BaseModel):
     def save(self, which_epoch):
         self.save_network(self.netG, 'G', which_epoch, self.gpu_ids)
         self.save_network(self.netD, 'D', which_epoch, self.gpu_ids)
+        self.save_network(self.erfnet, 'ERFNet', which_epoch, self.gpu_ids)
         if self.gen_features:
             self.save_network(self.netE, 'E', which_epoch, self.gpu_ids)
 
@@ -295,9 +392,23 @@ class Pix2PixHDModel(BaseModel):
             print('update learning rate: %f -> %f' % (self.old_lr, lr))
         self.old_lr = lr
 
+
+class CrossEntropyLoss2d(torch.nn.Module):
+
+    def __init__(self, weight=None):
+        super().__init__()
+
+        self.erfloss = torch.nn.NLLLoss(weight)
+
+    def forward(self, outputs, targets):
+        # print(torch.nn.functional.log_softmax(outputs, dim=1))
+        # print(targets)
+        target_output = targets[0]
+        np.savetxt("target_output.txt",target_output.cpu().numpy())
+        return self.erfloss(torch.nn.functional.log_softmax(outputs, dim=1), targets)
+
+
 class InferenceModel(Pix2PixHDModel):
     def forward(self, inp):
         label, inst = inp
         return self.inference(label, inst)
-
-        
