@@ -60,14 +60,23 @@ class Pix2PixHDModel(BaseModel):
             NUM_CLASSES = 20
             self.erfnet = ERFNet(NUM_CLASSES)
             '''
-            for param in self.erfnet.parameters():  # froze the layers
+            for name, param in self.erfnet.named_parameters():
+                if param.requires_grad:
+                    print(name)
+            '''
+            # forze the model
+            for param in self.erfnet.parameters():
                 param.requires_grad = False
-            
+
+            for name, param in self.erfnet.named_parameters():
+                if param.requires_grad:
+                    print(name)
+            '''
             # if (not args.cpu):
             if (True):
                 self.erfnet = torch.nn.DataParallel(self.erfnet).cuda()
             '''
-            self.erfnet.train()
+            self.erfnet.eval()
 
         # load networks
         if not self.isTrain or opt.continue_train or opt.load_pretrain:

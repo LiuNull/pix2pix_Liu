@@ -36,9 +36,10 @@ class AlignedDataset(BaseDataset):
         self.root = opt.dataroot    
 
         ### labelTrain semantic maps
-        dir_labelTrain = '_labelTrain'
-        self.dir_labelTrain = os.path.join(opt.dataroot, opt.phase + dir_labelTrain)
-        self.labelTrain_paths  = sorted(make_dataset(self.dir_labelTrain))
+        if opt.isTrain:
+            dir_labelTrain = '_labelTrain'
+            self.dir_labelTrain = os.path.join(opt.dataroot, opt.phase + dir_labelTrain)
+            self.labelTrain_paths  = sorted(make_dataset(self.dir_labelTrain))
 
 
         ### input A (label maps)
@@ -78,7 +79,7 @@ class AlignedDataset(BaseDataset):
             transform_A = get_transform(self.opt, params, method=Image.NEAREST, normalize=False)
             A_tensor = transform_A(A) * 255.0 # resize to 1024 * 512
 
-        B_tensor = inst_tensor = feat_tensor = 0
+        B_tensor = inst_tensor = feat_tensor = labelTrain = 0
         ### input B (real images)
         if self.opt.isTrain:
             B_path = self.B_paths[index]   
@@ -87,9 +88,10 @@ class AlignedDataset(BaseDataset):
             B_tensor = transform_B(B)
 
         ### labelTrain semantic maps
-        labelTrain_path = self.labelTrain_paths[index]
-        labelTrain = Image.open(labelTrain_path).convert('P')
-        labelTrain = MyCoTransform(labelTrain)
+        if self.opt.isTrain:
+            labelTrain_path = self.labelTrain_paths[index]
+            labelTrain = Image.open(labelTrain_path).convert('P')
+            labelTrain = MyCoTransform(labelTrain)
         # print(labelTrain.shape)
         # print(np.array(labelTrain_tensor).shape) # (1, 512, 1024)
         # np.savetxt("image_transformed.txt",np.array(labelTrain[0]))
