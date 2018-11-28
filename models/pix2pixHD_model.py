@@ -55,31 +55,35 @@ class Pix2PixHDModel(BaseModel):
         if self.opt.verbose:
                 print('---------- Networks initialized -------------')
 
+        
         # erfnet
+        '''
         if self.isTrain:
             NUM_CLASSES = 20
             self.erfnet = ERFNet(NUM_CLASSES)
-            '''
-            for param in self.erfnet.parameters():  # froze the layers
-                param.requires_grad = False
+            
+            # for param in self.erfnet.parameters():  # froze the layers
+            #     param.requires_grad = False
             
             # if (not args.cpu):
-            if (True):
-                self.erfnet = torch.nn.DataParallel(self.erfnet).cuda()
-            '''
+            # if (True):
+            #     self.erfnet = torch.nn.DataParallel(self.erfnet).cuda()
+            
             self.erfnet.train()
+        '''
 
         # load networks
         if not self.isTrain or opt.continue_train or opt.load_pretrain:
             pretrained_path = '' if not self.isTrain else opt.load_pretrain
             self.load_network(self.netG, 'G', opt.which_epoch, pretrained_path)
-            self.load_network(self.erfnet, 'ERFNet', opt.which_epoch, pretrained_path)            
+            # self.load_network(self.erfnet, 'ERFNet', opt.which_epoch, pretrained_path)            
             if self.isTrain:
                 self.load_network(self.netD, 'D', opt.which_epoch, pretrained_path)  
             if self.gen_features:
                 self.load_network(self.netE, 'E', opt.which_epoch, pretrained_path)              
 
         # load pre-trained erfnet
+        '''
         if self.isTrain and not opt.continue_train:
             weightspath = "/home/hsx/project/pix2pixHD_NoFeat/pix2pixHD/pre_trained/erfnet_pretrained.pth"
             def load_my_state_dict(model, state_dict):  # custom function to load model when not all dict elements
@@ -97,6 +101,7 @@ class Pix2PixHDModel(BaseModel):
 
             self.erfnet = load_my_state_dict(self.erfnet, torch.load(weightspath, map_location=lambda storage, loc: storage))
             print("Model and weights LOADED successfully")
+        '''
 
         # set loss functions and optimizers
         if self.isTrain:
@@ -152,7 +157,7 @@ class Pix2PixHDModel(BaseModel):
                 self.weight[18] = 10.138095855713
             self.weight[19] = 0
 
-            self.criterionERF = CrossEntropyLoss2d(self.weight.cuda())
+            # self.criterionERF = CrossEntropyLoss2d(self.weight.cuda())
 
             self.loss_filter = self.init_loss_filter(not opt.no_ganFeat_loss, not opt.no_vgg_loss)
             
@@ -275,9 +280,11 @@ class Pix2PixHDModel(BaseModel):
         if not self.opt.no_vgg_loss:
             loss_G_VGG = self.criterionVGG(fake_image, real_image) * self.opt.lambda_feat
 
-        # Use the ERFNet to get the fake image's semantic map
-        # with torch.no_grad():
 
+        # Use the ERFNet to get the fake image's semantic map
+        loss_ERF = 0
+        # with torch.no_grad():
+        '''
         outputs = self.erfnet(fake_image)
 
         # print(outputs) # torch.Size([1, 20, 512, 1024])
@@ -286,8 +293,8 @@ class Pix2PixHDModel(BaseModel):
         input_labelTrain = input_labelTrain[0]  # print(input_labelTrain.shape) # torch.Size([1, 512, 1024])
 
         loss_ERF = self.criterionERF(outputs.data.cuda(), input_labelTrain.long())
+        '''
         # Only return the fake_B image if necessary to save BW
-
         return [ self.loss_filter( loss_G_GAN, loss_G_GAN_Feat, loss_G_VGG, loss_D_real, loss_D_fake , loss_ERF), None if not infer else fake_image]
 
     def inference(self, label, inst):
