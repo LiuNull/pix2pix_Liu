@@ -82,14 +82,14 @@ class Pix2PixHDModel(BaseModel):
         if not self.isTrain or opt.continue_train or opt.load_pretrain:
             pretrained_path = '' if not self.isTrain else opt.load_pretrain
             self.load_network(self.netG, 'G', opt.which_epoch, pretrained_path)
-            self.load_network(self.erfnet, 'ERFNet', opt.which_epoch, pretrained_path)            
+            # self.load_network(self.erfnet, 'ERFNet', opt.which_epoch, pretrained_path)            
             if self.isTrain:
                 self.load_network(self.netD, 'D', opt.which_epoch, pretrained_path)  
             if self.gen_features:
                 self.load_network(self.netE, 'E', opt.which_epoch, pretrained_path)              
 
-        # load pre-trained erfnet
-        if self.isTrain and not opt.continue_train:
+        # load pre-trained erfnet for fine_tuning
+        if self.isTrain:
             weightspath = "/home/hsx/project/pix2pixHD_NoFeat/pix2pixHD/pre_trained/erfnet_pretrained.pth"
             def load_my_state_dict(model, state_dict):  # custom function to load model when not all dict elements
                 own_state = model.state_dict()

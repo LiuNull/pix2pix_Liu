@@ -11,6 +11,7 @@ import os
 import numpy as np
 import torch
 from torch.autograd import Variable
+from util import html
 
 opt = TrainOptions().parse()
 iter_path = os.path.join(opt.checkpoints_dir, opt.name, 'iter.txt')
@@ -35,7 +36,17 @@ dataset = data_loader.load_data()
 dataset_size = len(data_loader)
 print('#training images = %d' % dataset_size)
 
+opt.phase = 'test'
+opt.isTrain = False
+test_data_loader = CreateDataLoader(opt)
+test_dataset = test_data_loader.load_data()
+test_dataset_size = len(test_data_loader)
+print('#Test images = %d' % test_dataset_size)
+opt.phase = 'train'
+opt.isTrain = True
+
 model = create_model(opt)
+print("successfully loaded model")
 visualizer = Visualizer(opt)
 
 total_steps = (start_epoch-1) * dataset_size + epoch_iter
@@ -43,6 +54,9 @@ total_steps = (start_epoch-1) * dataset_size + epoch_iter
 display_delta = total_steps % opt.display_freq
 print_delta = total_steps % opt.print_freq
 save_delta = total_steps % opt.save_latest_freq
+
+test_web_dir = os.path.join(opt.results_dir, opt.name, '%s_%s' % (opt.phase, opt.which_epoch))
+test_webpage = html.HTML(test_web_dir, 'Experiment = %s, Phase = %s, Epoch = %s' % (opt.name, opt.phase, opt.which_epoch))
 
 for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
     epoch_start_time = time.time()
@@ -52,15 +66,26 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
         iter_start_time = time.time()
         total_steps += opt.batchSize
         epoch_iter += opt.batchSize
+        print("Start testing")
+        # generate the test images for calculating FID
+        for test_i, test_data in enumerate(test_dataset):
+            _, test_generated = model(Variable(test_data['label']), Variable(test_data['inst']), Variable(test_data['image']), Variable(test_data['feat']),Variable(test_data['labelTrain']), infer=True)
+            visuals = OrderedDict([('input_label', util.tensor2label(test_data['label'][0], opt.label_nc)),
+                           ('synthesized_image', util.tensor2im(test_generated.data[0]))])
+            img_path = test_data['path']
+            print('process image... %s' % img_path)
+            visualizer.save_images(test_webpage, visuals, img_path)
+            visualizer.display_current_results(visuals, epoch, total_steps)
+        # calculate the FID for test_data
+        
 
         # whether to collect output images
         save_fake = total_steps % opt.display_freq == display_delta
         labelTrain = Variable(data['labelTrain'])
         # print(labelTrain[0,0].shape) torch.Size([512, 1024])
         # np.savetxt("labelTrain.txt",labelTrain[0,0].numpy())
-
         ############## Forward Pass ######################
-        losses, generated = model(Variable(data['label']), Variable(data['inst']), Variable(data['image']), Variable(data['feat']),Variable(data['labelTrain']), infer=save_fake)
+        _, generated = model(Variable(data['label']), Variable(data['inst']), Variable(data['image']), Variable(data['feat']),Variable(data['labelTrain']), infer=save_fake)
 
         # print(ERF_fake_loss) tensor(3.2985, device='cuda:1')
 

@@ -36,10 +36,10 @@ class AlignedDataset(BaseDataset):
         self.root = opt.dataroot    
 
         ### labelTrain semantic maps
-        if opt.isTrain:
-            dir_labelTrain = '_labelTrain'
-            self.dir_labelTrain = os.path.join(opt.dataroot, opt.phase + dir_labelTrain)
-            self.labelTrain_paths  = sorted(make_dataset(self.dir_labelTrain))
+        dir_labelTrain = '_labelTrain'
+        self.dir_labelTrain = os.path.join(opt.dataroot, opt.phase + dir_labelTrain)
+        self.labelTrain_paths  = sorted(make_dataset(self.dir_labelTrain))
+        print(len(self.labelTrain_paths))
 
 
         ### input A (label maps)
@@ -48,10 +48,9 @@ class AlignedDataset(BaseDataset):
         self.A_paths = sorted(make_dataset(self.dir_A))
 
         ### input B (real images)
-        if opt.isTrain:
-            dir_B = '_B' if self.opt.label_nc == 0 else '_img'
-            self.dir_B = os.path.join(opt.dataroot, opt.phase + dir_B)  
-            self.B_paths = sorted(make_dataset(self.dir_B))
+        dir_B = '_B' if self.opt.label_nc == 0 else '_img'
+        self.dir_B = os.path.join(opt.dataroot, opt.phase + dir_B)  
+        self.B_paths = sorted(make_dataset(self.dir_B))
 
         ### instance maps
         if not opt.no_instance:
@@ -81,17 +80,15 @@ class AlignedDataset(BaseDataset):
 
         B_tensor = inst_tensor = feat_tensor = labelTrain = 0
         ### input B (real images)
-        if self.opt.isTrain:
-            B_path = self.B_paths[index]   
-            B = Image.open(B_path).convert('RGB')
-            transform_B = get_transform(self.opt, params)      
-            B_tensor = transform_B(B)
+        B_path = self.B_paths[index]   
+        B = Image.open(B_path).convert('RGB')
+        transform_B = get_transform(self.opt, params)      
+        B_tensor = transform_B(B)
 
         ### labelTrain semantic maps
-        if self.opt.isTrain:
-            labelTrain_path = self.labelTrain_paths[index]
-            labelTrain = Image.open(labelTrain_path).convert('P')
-            labelTrain = MyCoTransform(labelTrain)
+        labelTrain_path = self.labelTrain_paths[index]
+        labelTrain = Image.open(labelTrain_path).convert('P')
+        labelTrain = MyCoTransform(labelTrain)
         # print(labelTrain.shape)
         # print(np.array(labelTrain_tensor).shape) # (1, 512, 1024)
         # np.savetxt("image_transformed.txt",np.array(labelTrain[0]))
