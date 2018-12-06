@@ -15,6 +15,39 @@ from torch.autograd import Variable
 from util import html
 from util import fid_score
 
+
+def validate(model,test_dataset,visualizer,test_webpage,epoch,total_steps,test_web_dir,epoch_iter):
+    if total_steps % 100 ==0:
+        print("Start testing")
+        torch.set_grad_enabled(False)
+        model.eval()
+        # generate the test images for calculating FID
+        for test_i, test_data in enumerate(test_dataset):
+            if test_i >=10:
+                break
+            _, test_generated = model(Variable(test_data['label']), Variable(test_data['inst']), Variable(test_data['image']), Variable(test_data['feat']),Variable(test_data['labelTrain']), infer=True)
+            test_visuals = OrderedDict([('input_label', util.tensor2label(test_data['label'][0], opt.label_nc)),
+                            ('synthesized_image', util.tensor2im(test_generated.data[0]))])
+            test_img_path = test_data['path']
+            print('process image... %s' % test_img_path)
+            visualizer.save_images(test_webpage, test_visuals, test_img_path)
+            visualizer.display_current_results(test_visuals, epoch, total_steps)
+
+        # calculate the FID for test_data
+        test_path = os.path.join(test_web_dir,'images')
+        # print(test_path)
+        compare_path = '/home/hsx/Datasets/cityscapes/leftImg8bit/val/'
+        paths = []
+        paths.append(test_path)
+        paths.append(compare_path)
+        fid_value = fid_score.calculate_fid_given_paths(paths,batch_size=64,dims=2048,cuda=False)
+        message = 'Epoch:%d, iteration:%d, the test fid: %f' %(epoch,epoch_iter,fid_value)
+        print(message)
+        testlog_name = os.path.join(opt.checkpoints_dir, opt.name, 'test_fid_log.txt')
+        with open(testlog_name, "a") as log_file:
+            log_file.write('%s\n' % message)
+
+
 opt = TrainOptions().parse()
 iter_path = os.path.join(opt.checkpoints_dir, opt.name, 'iter.txt')
 if opt.continue_train:
@@ -65,40 +98,7 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
     if epoch != start_epoch:
         epoch_iter = epoch_iter % dataset_size
     for i, data in enumerate(dataset, start=epoch_iter):
-        # validate(model,test_dataset,visualizer,test_webpage,epoch,total_steps)
-        if total_steps % 100 ==0:
-            print("Start testing")
-            torch.set_grad_enabled(False)
-            model.eval()
-            # generate the test images for calculating FID
-            for test_i, test_data in enumerate(test_dataset):
-                if test_i >=10:
-                    break
-                _, test_generated = model(Variable(test_data['label']), Variable(test_data['inst']), Variable(test_data['image']), Variable(test_data['feat']),Variable(test_data['labelTrain']), infer=True)
-                test_visuals = OrderedDict([('input_label', util.tensor2label(test_data['label'][0], opt.label_nc)),
-                               ('synthesized_image', util.tensor2im(test_generated.data[0]))])
-                test_img_path = test_data['path']
-                print('process image... %s' % test_img_path)
-                visualizer.save_images(test_webpage, test_visuals, test_img_path)
-                visualizer.display_current_results(test_visuals, epoch, total_steps)
-
-            # calculate the FID for test_data
-            # def calculate_fid_given_paths(paths, batch_size, cuda, dims):
-            
-            test_path = os.path.join(test_web_dir,'images')
-            # print(test_path)
-            compare_path = '/home/hsx/Datasets/cityscapes/leftImg8bit/val/'
-            paths = []
-            paths.append(test_path)
-            paths.append(compare_path)
-            fid_value = fid_score.calculate_fid_given_paths(paths,batch_size=64,dims=2048,cuda=False)
-            message = 'Epoch:%d, iteration:%d, the test fid: %f' %(epoch,epoch_iter,fid_value)
-            print(message)
-            testlog_name = os.path.join(opt.checkpoints_dir, opt.name, 'test_fid_log.txt')
-            with open(testlog_name, "a") as log_file:
-                log_file.write('%s\n' % message)
-            
-
+        validate(model,test_dataset,visualizer,test_webpage,epoch,total_steps,test_web_dir,epoch_iter)
         torch.set_grad_enabled(True)
         model.train()
         iter_start_time = time.time()
@@ -182,6 +182,3 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
     ### linearly decay learning rate after certain iterations
     if epoch > opt.niter:
         model.module.update_learning_rate()
-
-
-# def validate():
