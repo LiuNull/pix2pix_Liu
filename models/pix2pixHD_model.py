@@ -254,7 +254,6 @@ class Pix2PixHDModel(BaseModel):
         else:
             input_concat = input_label
         fake_image = self.netG.forward(input_concat)
-        # print("get fake image")
         # print(fake_image.shape) # torch.Size([1, 3, 512, 1024])
 
         # Fake Detection and Loss
@@ -288,7 +287,6 @@ class Pix2PixHDModel(BaseModel):
         # with torch.no_grad():
 
         outputs = self.erfnet(fake_image)
-
         # print(outputs) # torch.Size([1, 20, 512, 1024])
         # print(outputs.type()) # torch.ByteTensor
 
