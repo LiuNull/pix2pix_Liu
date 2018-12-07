@@ -16,26 +16,24 @@ from util import html
 from util import fid_score
 
 
-def validate(model,test_dataset,visualizer,test_webpage,epoch,total_steps,test_web_dir,epoch_iter):
-    if total_steps % 100 ==0:
-        print("Start testing")
+def validate(model,test_dataset,visualizer,epoch,total_steps,epoch_iter):
+    test_web_dir = os.path.join(opt.results_dir, opt.name, '%s_%s_%d' % (opt.phase, epoch,epoch_iter))
+    test_webpage = html.HTML(test_web_dir, 'Experiment = %s, Phase = %s, Epoch = %s, Iter = %d' % (opt.name, opt.phase, epoch, epoch_iter))
+    if total_steps % 200 ==0:
         torch.set_grad_enabled(False)
         model.eval()
         # generate the test images for calculating FID
         for test_i, test_data in enumerate(test_dataset):
-            if test_i >=10:
-                break
             _, test_generated = model(Variable(test_data['label']), Variable(test_data['inst']), Variable(test_data['image']), Variable(test_data['feat']),Variable(test_data['labelTrain']), infer=True)
             test_visuals = OrderedDict([('input_label', util.tensor2label(test_data['label'][0], opt.label_nc)),
                             ('synthesized_image', util.tensor2im(test_generated.data[0]))])
             test_img_path = test_data['path']
-            print('process image... %s' % test_img_path)
-            visualizer.save_images(test_webpage, test_visuals, test_img_path)
+            # print('process image... %s' % test_img_path)
+            visualizer.save_images(test_webpage, test_visuals, test_img_path,epoch_iter)
             visualizer.display_current_results(test_visuals, epoch, total_steps)
 
         # calculate the FID for test_data
         test_path = os.path.join(test_web_dir,'images')
-        # print(test_path)
         compare_path = '/home/hsx/Datasets/cityscapes/leftImg8bit/val/'
         paths = []
         paths.append(test_path)
@@ -90,15 +88,13 @@ display_delta = total_steps % opt.display_freq
 print_delta = total_steps % opt.print_freq
 save_delta = total_steps % opt.save_latest_freq
 
-test_web_dir = os.path.join(opt.results_dir, opt.name, '%s_%s' % (opt.phase, opt.which_epoch))
-test_webpage = html.HTML(test_web_dir, 'Experiment = %s, Phase = %s, Epoch = %s' % (opt.name, opt.phase, opt.which_epoch))
 
 for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
     epoch_start_time = time.time()
     if epoch != start_epoch:
         epoch_iter = epoch_iter % dataset_size
     for i, data in enumerate(dataset, start=epoch_iter):
-        validate(model,test_dataset,visualizer,test_webpage,epoch,total_steps,test_web_dir,epoch_iter)
+        validate(model,test_dataset,visualizer,epoch,total_steps,epoch_iter)
         torch.set_grad_enabled(True)
         model.train()
         iter_start_time = time.time()
